@@ -6,8 +6,8 @@ from aws_cdk import (
     aws_autoscaling as autoscaling,
     aws_elasticloadbalancingv2 as elb,
     aws_elasticache as elcache,
-    aws_rds as rds,
 )
+
 from constructs import Construct
 
 
@@ -22,7 +22,7 @@ class CacheClusterStack(Stack):
             "yum install -y httpd",
             "systemctl start httpd",
             "systemctl enable httpd",
-            "\"<h1>Hello World from $(hostname -f)</h1>\" >> / var / www / html / index.html",
+            "echo \"<h1>Hello World from $(hostname -f)</h1>\" >> /var/www/html/index.html",
         )
         vpc = ec2.Vpc(self, "VPC")
         sg_ec2 = ec2.SecurityGroup(
@@ -31,13 +31,16 @@ class CacheClusterStack(Stack):
             vpc=vpc,
             security_group_name="ec2-sample-secgroup"
         )
-        subnet_group = rds.SubnetGroup(
+        subnet_group2 = elcache.CfnSubnetGroup(
             self,
             'MySubnetGroup',
-            vpc=vpc,
+            #vpc=vpc,
             description='My rds Sub',
-            subnet_group_name="sample-subnet-group"
+            cache_subnet_group_name="sample-subnet-group",
+            subnet_ids=[subnet.subnet_id for subnet in vpc.private_subnets]
         )
+
+
 
         asg = autoscaling.AutoScalingGroup(
             self,
@@ -79,7 +82,7 @@ class CacheClusterStack(Stack):
             "ElastiCacheGroup",
             cache_node_type="cache.t4g.micro",
             engine="memcached",
-            cache_subnet_group_name=subnet_group.subnet_group_name,
+            cache_subnet_group_name=subnet_group2.cache_subnet_group_name,
             num_cache_nodes=4,
             az_mode="cross-az",
             cluster_name="SampleCluster",
@@ -87,3 +90,5 @@ class CacheClusterStack(Stack):
             port=43334,
             vpc_security_group_ids=[sg_ec2.security_group_id],
         )
+
+        memcache.add_depends_on(subnet_group2)
