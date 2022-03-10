@@ -22,18 +22,40 @@ class CacheClusterStack(Stack):
             "systemctl enable httpd",
             "echo \"<h1>Hello World from $(hostname -f)</h1>\" >> /var/www/html/index.html",
         )
-        vpc = ec2.Vpc(self, "VPC")
-        sg_ec2 = ec2.SecurityGroup(
+        vpc = ec2.Vpc(
             self,
-            id="ec2-sample-secgroup",
+            "VPC",
+            subnet_configuration=[
+                ec2.SubnetConfiguration(
+                    name='Public-Subnet',
+                    subnet_type=ec2.SubnetType.PUBLIC,
+                    cidr_mask=24,
+                ),
+                ec2.SubnetConfiguration(
+                    name='Private-Subnet',
+                    subnet_type=ec2.SubnetType.PRIVATE_WITH_NAT,
+                    cidr_mask=23,
+                )
+            ]
+        )
+        security_group_memcache = ec2.SecurityGroup(
+            self,
+            id="memcache_security_group",
             vpc=vpc,
-            security_group_name="ec2-sample-secgroup"
+            security_group_name="memcache-security-group"
+        )
+
+        security_group_instances = ec2.SecurityGroup(
+            self,
+            id="ec2_instance_group",
+            vpc=vpc,
+            security_group_name="ec2-instance-group"
         )
 
         subnet_group = elcache.CfnSubnetGroup(
             self,
             'MySubnetGroup',
-            description='My rds Sub',
+            description='My Memcached Sub',
             cache_subnet_group_name="sample-subnet-group",
             subnet_ids=[subnet.subnet_id for subnet in vpc.private_subnets]
         )
@@ -48,7 +70,7 @@ class CacheClusterStack(Stack):
             machine_image=ec2.AmazonLinuxImage(generation=ec2.AmazonLinuxGeneration.AMAZON_LINUX_2),
             # user_data=some_defined_data_not_defined_yet
             user_data=userdata,
-            security_group=sg_ec2,
+            security_group=security_group_instances,
             min_capacity=2,
             max_capacity=4,
         )
@@ -72,19 +94,75 @@ class CacheClusterStack(Stack):
             targets=[asg],
         )
 
+        # Security group for memcached
+        security_group_memcache.connections.allow_from(
+            security_group_instances, ec2.Port.tcp(43334),
+        )
+        # Security group for instances / Load balancer / autoscaling group
+        security_group_instances.connections.allow_from(
+            security_group_memcache, ec2.Port.tcp(43334),
+        )
         # cache.t4g.micro
-        memcache = elcache.CfnCacheCluster(
+        memcached0 = elcache.CfnCacheCluster(
             self,
-            "ElastiCacheGroup",
+            "Cache0",
             cache_node_type="cache.t4g.micro",
             engine="memcached",
             cache_subnet_group_name=subnet_group.cache_subnet_group_name,
             num_cache_nodes=4,
             az_mode="cross-az",
-            cluster_name="SampleCluster",
+            preferred_availability_zones=["us-east-1a", "us-east-1b", "us-east-1a", "us-east-1b"],
+            cluster_name="Cluster0",
             engine_version="1.6.6",
             port=43334,
-            vpc_security_group_ids=[sg_ec2.security_group_id],
+            vpc_security_group_ids=[security_group_memcache.security_group_id],
         )
 
-        memcache.add_depends_on(subnet_group)
+        memcached1 = elcache.CfnCacheCluster(
+            self,
+            "Cache1",
+            cache_node_type="cache.t4g.micro",
+            engine="memcached",
+            cache_subnet_group_name=subnet_group.cache_subnet_group_name,
+            num_cache_nodes=4,
+            az_mode="cross-az",
+            preferred_availability_zones=["us-east-1a", "us-east-1b", "us-east-1a", "us-east-1b"],
+            cluster_name="Cluster1",
+            engine_version="1.6.6",
+            port=43334,
+            vpc_security_group_ids=[security_group_memcache.security_group_id],
+        )
+
+        memcached2 = elcache.CfnCacheCluster(
+            self,
+            "Cache2",
+            cache_node_type="cache.t4g.micro",
+            engine="memcached",
+            cache_subnet_group_name=subnet_group.cache_subnet_group_name,
+            num_cache_nodes=4,
+            az_mode="cross-az",
+            preferred_availability_zones=["us-east-1a", "us-east-1b", "us-east-1a", "us-east-1b"],
+            cluster_name="Cluster2",
+            engine_version="1.6.6",
+            port=43334,
+            vpc_security_group_ids=[security_group_memcache.security_group_id],
+        )
+
+        memcached3 = elcache.CfnCacheCluster(
+            self,
+            "Cache3",
+            cache_node_type="cache.t4g.micro",
+            engine="memcached",
+            cache_subnet_group_name=subnet_group.cache_subnet_group_name,
+            num_cache_nodes=4,
+            az_mode="cross-az",
+            preferred_availability_zones=["us-east-1a", "us-east-1b", "us-east-1a", "us-east-1b"],
+            cluster_name="Cluster3",
+            engine_version="1.6.6",
+            port=43334,
+            vpc_security_group_ids=[security_group_memcache.security_group_id],
+        )
+        memcached0.add_depends_on(subnet_group)
+        memcached1.add_depends_on(subnet_group)
+        memcached2.add_depends_on(subnet_group)
+        memcached3.add_depends_on(subnet_group)
